@@ -1,19 +1,20 @@
+'''Agente Chatbot Educativo IA'''
+import os
+import shutil
+from datetime import datetime
 import streamlit as st
 from dotenv import load_dotenv
-import os
-load_dotenv()  # Carga variables de entorno desde un archivo .env
-
-# Muestra por consola si se cargó correctamente la clave de API
-print("✅ Clave cargada:", os.getenv("GROQ_API_KEY"))
-
-import json
-from datetime import datetime
 
 # Importa clases propias del proyecto
 from utils.pdf_processor import PDFProcessor
 from utils.embedding_manager import EmbeddingManager
 from utils.chat_manager import ChatManager
 from utils.language_manager import LanguageManager
+
+load_dotenv()  # Carga variables de entorno desde un archivo .env
+
+# Muestra por consola si se cargó correctamente la clave de API
+print("✅ Clave cargada:", os.getenv("GROQ_API_KEY"))
 
 # Configuración de la página Streamlit
 st.set_page_config(
@@ -24,35 +25,37 @@ st.set_page_config(
 )
 
 # Función para cargar PDFs procesados previamente
-def load_existing_pdfs():
+def load_existing_pdfs(embedding_manager_instance):
     """Cargar información de PDFs que ya fueron procesados anteriormente"""
     processed_pdfs = []
-    
+
     # Directorio donde se guardan los PDFs
     pdf_dir = "data/uploaded_pdfs"
-    
+
     if os.path.exists(pdf_dir):
         # Obtener lista de archivos PDF en el directorio
         pdf_files = [f for f in os.listdir(pdf_dir) if f.endswith('.pdf')]
-        
+
         # Para cada archivo PDF encontrado, obtener información del embedding manager
         for pdf_file in pdf_files:
-            file_path = os.path.join(pdf_dir, pdf_file)
-            if os.path.exists(file_path):
+            pdf_path = os.path.join(pdf_dir, pdf_file)
+            if os.path.exists(pdf_path):
                 # Obtener información del archivo
-                file_stats = os.stat(file_path)
+                file_stats = os.stat(pdf_path)
                 processed_time = datetime.fromtimestamp(file_stats.st_mtime)
-                
+
                 # Contar chunks en el embedding manager para este documento
-                chunks_count = len([doc for doc in embedding_manager.documents if doc.get('document') == pdf_file])
-                
+                chunks_count = len(
+                    [doc for doc in embedding_manager_instance.documents
+                        if doc.get('document') == pdf_file])
+
                 if chunks_count > 0:  # Solo agregar si tiene chunks procesados
                     processed_pdfs.append({
                         'name': pdf_file,
                         'chunks': chunks_count,
                         'processed_at': processed_time.strftime("%Y-%m-%d %H:%M")
                     })
-    
+
     return processed_pdfs
 
 # Estado inicial de la sesión
@@ -66,17 +69,18 @@ if 'embedding_manager' not in st.session_state:
 # Inicializa las clases necesarias y las guarda en caché
 @st.cache_resource
 def get_managers():
-    pdf_processor = PDFProcessor()
-    embedding_manager = EmbeddingManager()
-    chat_manager = ChatManager()
-    language_manager = LanguageManager()
-    return pdf_processor, embedding_manager, chat_manager, language_manager
+    """Inicializa y retorna las instancias de los managers"""
+    processor = PDFProcessor()
+    embeddings = EmbeddingManager()
+    chat = ChatManager()
+    language = LanguageManager()
+    return processor, embeddings, chat, language
 
 pdf_processor, embedding_manager, chat_manager, language_manager = get_managers()
 
 # Cargar PDFs procesados previamente si la lista está vacía
 if not st.session_state.processed_pdfs:
-    st.session_state.processed_pdfs = load_existing_pdfs()
+    st.session_state.processed_pdfs = load_existing_pdfs(embedding_manager)
 
 # Fija el idioma directamente a español (ya no hay opción para elegir)
 st.session_state.language = 'es'
@@ -104,13 +108,13 @@ with st.sidebar:
                 with st.spinner(f"{lang['processing']} {uploaded_file.name}..."):
                     try:
                         # Guarda el archivo localmente
-                        file_path = f"data/uploaded_pdfs/{uploaded_file.name}"
-                        os.makedirs(os.path.dirname(file_path), exist_ok=True)
-                        with open(file_path, "wb") as f:
+                        FILE_PATH = f"data/uploaded_pdfs/{uploaded_file.name}"
+                        os.makedirs(os.path.dirname(FILE_PATH), exist_ok=True)
+                        with open(FILE_PATH, "wb") as f:
                             f.write(uploaded_file.getbuffer())
 
                         # Procesa el PDF y genera embeddings
-                        chunks = pdf_processor.process_pdf(file_path)
+                        chunks = pdf_processor.process_pdf(FILE_PATH)
                         embedding_manager.add_documents(chunks, uploaded_file.name)
 
                         # Guarda los datos del archivo procesado
@@ -121,8 +125,10 @@ with st.sidebar:
                         })
 
                         st.success(f"✅ {uploaded_file.name} {lang['processed_successfully']}")
-                    except Exception as e:
+                    except (IOError, OSError) as e:
                         st.error(f"❌ {lang['error_processing']} {uploaded_file.name}: {str(e)}")
+                    except (ValueError, TypeError) as e:
+                        st.error(f"❌ Error inesperado al procesar {uploaded_file.name}: {str(e)}")
 
     # Muestra los PDFs procesados
     if st.session_state.processed_pdfs:
@@ -133,10 +139,13 @@ with st.sidebar:
                 st.write(f"**{lang['processed_at']}:** {pdf['processed_at']}")
                 if st.button(f"{lang['delete']} {pdf['name']}", key=f"delete_{pdf['name']}"):
                     embedding_manager.remove_document(pdf['name'])
-                    st.session_state.processed_pdfs = [p for p in st.session_state.processed_pdfs if p['name'] != pdf['name']]
+                    st.session_state.processed_pdfs = [
+                        p for p in st.session_state.processed_pdfs
+                            if p['name'] != pdf['name']]
                     try:
                         os.remove(f"data/uploaded_pdfs/{pdf['name']}")
-                    except:
+                    except (FileNotFoundError, PermissionError):
+                        # Archivo no encontrado o sin permisos, continuar sin error
                         pass
                     st.rerun()
 
@@ -147,10 +156,10 @@ with st.sidebar:
             st.session_state.processed_pdfs = []
             st.session_state.chat_history = []
             try:
-                import shutil
                 shutil.rmtree("data/uploaded_pdfs")
                 os.makedirs("data/uploaded_pdfs", exist_ok=True)
-            except:
+            except (FileNotFoundError, PermissionError, OSError):
+                # Error al limpiar archivos, continuar sin error crítico
                 pass
             st.rerun()
 
@@ -203,12 +212,19 @@ with col1:
                                 for source in sources:
                                     st.write(f"📄 **{source['document']}** - {lang['relevance']}: {source['score']:.2f}")
                                     st.write(f"*{source['content'][:200]}...*")
-                    except Exception as e:
-                        error_msg = f"{lang['error_generating']}: {str(e)}"
-                        st.error(error_msg)
+                    except (KeyError, ValueError) as e:
+                        ERROR_MSG = f"{lang['error_generating']}: Error de datos - {str(e)}"
+                        st.error(ERROR_MSG)
                         st.session_state.chat_history.append({
                             "role": "assistant",
-                            "content": error_msg
+                            "content": ERROR_MSG
+                        })
+                    except (ConnectionError, TimeoutError) as e:
+                        ERROR_MSG = f"{lang['error_generating']}: Error inesperado - {str(e)}"
+                        st.error(ERROR_MSG)
+                        st.session_state.chat_history.append({
+                            "role": "assistant",
+                            "content": ERROR_MSG
                         })
 
 # Columna derecha: estadísticas y configuración
