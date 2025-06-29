@@ -23,6 +23,38 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# Función para cargar PDFs procesados previamente
+def load_existing_pdfs():
+    """Cargar información de PDFs que ya fueron procesados anteriormente"""
+    processed_pdfs = []
+    
+    # Directorio donde se guardan los PDFs
+    pdf_dir = "data/uploaded_pdfs"
+    
+    if os.path.exists(pdf_dir):
+        # Obtener lista de archivos PDF en el directorio
+        pdf_files = [f for f in os.listdir(pdf_dir) if f.endswith('.pdf')]
+        
+        # Para cada archivo PDF encontrado, obtener información del embedding manager
+        for pdf_file in pdf_files:
+            file_path = os.path.join(pdf_dir, pdf_file)
+            if os.path.exists(file_path):
+                # Obtener información del archivo
+                file_stats = os.stat(file_path)
+                processed_time = datetime.fromtimestamp(file_stats.st_mtime)
+                
+                # Contar chunks en el embedding manager para este documento
+                chunks_count = len([doc for doc in embedding_manager.documents if doc.get('document') == pdf_file])
+                
+                if chunks_count > 0:  # Solo agregar si tiene chunks procesados
+                    processed_pdfs.append({
+                        'name': pdf_file,
+                        'chunks': chunks_count,
+                        'processed_at': processed_time.strftime("%Y-%m-%d %H:%M")
+                    })
+    
+    return processed_pdfs
+
 # Estado inicial de la sesión
 if 'chat_history' not in st.session_state:
     st.session_state.chat_history = []
@@ -41,6 +73,10 @@ def get_managers():
     return pdf_processor, embedding_manager, chat_manager, language_manager
 
 pdf_processor, embedding_manager, chat_manager, language_manager = get_managers()
+
+# Cargar PDFs procesados previamente si la lista está vacía
+if not st.session_state.processed_pdfs:
+    st.session_state.processed_pdfs = load_existing_pdfs()
 
 # Fija el idioma directamente a español (ya no hay opción para elegir)
 st.session_state.language = 'es'
