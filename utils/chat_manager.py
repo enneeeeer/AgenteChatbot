@@ -12,6 +12,17 @@ class ChatManager:
         self.model = "llama3-8b-8192"  # Modelo gratuito disponible en Groq
     
     def get_response(self, query: str, embedding_manager: EmbeddingManager, language: str = 'es') -> Tuple[str, List[Dict]]:
+        import re
+
+        # Limpieza estricta del input
+        query_clean = re.sub(r'[^\w\s]', '', query.strip().lower())  # elimina signos como ! . ?
+        
+        # Lista de saludos comunes
+        saludos = ['hola', 'buenas', 'que tal', 'hey', 'saludos', 'como estas']
+
+        if query_clean in saludos:
+            return "¡Hola! ¿En qué tema del material educativo te gustaría que te ayude?", []
+
         """
         Generar una respuesta utilizando el modelo LLM basado en la consulta del usuario
         y los documentos recuperados más relevantes.
