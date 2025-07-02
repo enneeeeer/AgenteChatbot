@@ -3,7 +3,9 @@ import os
 import shutil
 from datetime import datetime
 import streamlit as st
-from dotenv import load_dotenv
+if not st.secrets:
+    from dotenv import load_dotenv
+    load_dotenv()
 
 # Importa clases propias del proyecto
 from utils.pdf_processor import PDFProcessor
@@ -11,10 +13,12 @@ from utils.embedding_manager import EmbeddingManager
 from utils.chat_manager import ChatManager
 from utils.language_manager import LanguageManager
 
-load_dotenv()  # Carga variables de entorno desde un archivo .env
-
-# Muestra por consola si se cargó correctamente la clave de API
-print("✅ Clave cargada:", os.getenv("GROQ_API_KEY"))
+# Carga segura desde los secrets de Streamlit
+groq_api_key = st.secrets.get("GROQ_API_KEY", "")
+# Prioridad: secrets > .env
+groq_api_key = st.secrets.get("GROQ_API_KEY", os.getenv("GROQ_API_KEY", ""))
+# Mostrar por consola si se cargó correctamente
+print("✅ Clave cargada:", groq_api_key)
 
 # Configuración de la página Streamlit
 st.set_page_config(
@@ -241,7 +245,7 @@ with col2:
 
     st.header(lang['configuration'])
 
-    groq_api_key = os.getenv("GROQ_API_KEY", "")
+    groq_api_key = st.secrets.get("GROQ_API_KEY", "")
     if groq_api_key:
         st.success(f"✅ {lang['api_configured']}")
     else:
