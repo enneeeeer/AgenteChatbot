@@ -5,12 +5,11 @@ from typing import List, Dict, Tuple
 from utils.embedding_manager import EmbeddingManager
 
 class ChatManager:
-    def __init__(self):
-        # Cargar la clave de la API Groq desde las variables de entorno
-        self.groq_api_key = os.getenv("GROQ_API_KEY", "")
+    def __init__(self, api_key: str):
+        self.groq_api_key = api_key
         self.groq_url = "https://api.groq.com/openai/v1/chat/completions"
         self.model = "llama3-8b-8192"  # Modelo gratuito disponible en Groq
-    
+
     def get_response(self, query: str, embedding_manager: EmbeddingManager, language: str = 'es') -> Tuple[str, List[Dict]]:
         import re
 

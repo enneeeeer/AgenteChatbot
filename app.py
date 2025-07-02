@@ -3,9 +3,6 @@ import os
 import shutil
 from datetime import datetime
 import streamlit as st
-if not st.secrets:
-    from dotenv import load_dotenv
-    load_dotenv()
 
 # Importa clases propias del proyecto
 from utils.pdf_processor import PDFProcessor
@@ -13,12 +10,18 @@ from utils.embedding_manager import EmbeddingManager
 from utils.chat_manager import ChatManager
 from utils.language_manager import LanguageManager
 
-# Carga segura desde los secrets de Streamlit
-groq_api_key = st.secrets.get("GROQ_API_KEY", "")
-# Prioridad: secrets > .env
-groq_api_key = st.secrets.get("GROQ_API_KEY", os.getenv("GROQ_API_KEY", ""))
-# Mostrar por consola si se cargó correctamente
-print("✅ Clave cargada:", groq_api_key)
+# Intentar cargar la API key desde st.secrets si existe
+try:
+    groq_api_key = st.secrets["GROQ_API_KEY"]
+    print("✅ Clave cargada desde Streamlit secrets")
+except st.runtime.secrets.StreamlitSecretNotFoundError:
+    from dotenv import load_dotenv
+    load_dotenv()
+    groq_api_key = os.getenv("GROQ_API_KEY", "")
+    print("⚠️ Clave cargada desde archivo .env")
+# Validación básica
+if not groq_api_key:
+    st.error("❌ No se pudo cargar la clave GROQ_API_KEY. Asegúrate de tener un archivo .env o secrets.toml configurado.")
 
 # Configuración de la página Streamlit
 st.set_page_config(
@@ -72,15 +75,14 @@ if 'embedding_manager' not in st.session_state:
 
 # Inicializa las clases necesarias y las guarda en caché
 @st.cache_resource
-def get_managers():
-    """Inicializa y retorna las instancias de los managers"""
+def get_managers(api_key):
     processor = PDFProcessor()
     embeddings = EmbeddingManager()
-    chat = ChatManager()
+    chat = ChatManager(api_key=api_key)
     language = LanguageManager()
     return processor, embeddings, chat, language
 
-pdf_processor, embedding_manager, chat_manager, language_manager = get_managers()
+pdf_processor, embedding_manager, chat_manager, language_manager = get_managers(groq_api_key)
 
 # Cargar PDFs procesados previamente si la lista está vacía
 if not st.session_state.processed_pdfs:
@@ -245,12 +247,12 @@ with col2:
 
     st.header(lang['configuration'])
 
-    groq_api_key = st.secrets.get("GROQ_API_KEY", "")
     if groq_api_key:
-        st.success(f"✅ {lang['api_configured']}")
+     st.success("✅ Clave de API configurada correctamente")
     else:
-        st.error(f"❌ {lang['api_not_configured']}")
-        st.info(lang['api_help'])
+     st.error("❌ No se ha configurado la clave de API (ni en secrets.toml ni en .env)")
+
+
 
     # Botón para limpiar el historial del chat
     if st.session_state.chat_history:
